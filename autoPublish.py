@@ -51,9 +51,10 @@ class ToutiaoAutoPublisher:
         self.driver.get("https://mp.toutiao.com/")
         
         # 等待并选择登录方式（示例为账号密码登录）
-        self.wait.until(EC.presence_of_element_located(
-            (By.XPATH, "//li[@aria-label='账密登录']")
-        ))
+        time.sleep(2)
+        # self.wait.until(EC.presence_of_element_located(
+        #     (By.XPATH, "//li[@aria-label='账密登录']")
+        # ))
         self.driver.find_element(By.XPATH, "//li[@aria-label='账密登录']").click()
 
         # self.wait.until(EC.element_to_be_clickable(
@@ -191,8 +192,8 @@ class ToutiaoAutoPublisher:
                     self.driver.close()
                     self.driver.switch_to.window(current_window)
 
-                    # 随机间隔等待 3 ~ 10 min
-                    snooze = 150 + random.random() * 400
+                    # 随机间隔等待
+                    snooze = 3 * 60 + random.random() * 15 * 60
                     print(f"等待 {snooze} 秒")
                     time.sleep(snooze)
 
