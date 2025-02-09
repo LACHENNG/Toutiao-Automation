@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -53,10 +54,31 @@ func NewPublisherController(maxPerHour int, minInterval, maxInterval time.Durati
 	}
 }
 
+// CheckAfterSixAM 判断当前时间是否过了早上6点
+func CheckAfterSixAM() (bool, time.Duration) {
+	now := time.Now()
+	sixAM := time.Date(now.Year(), now.Month(), now.Day(), 6, 0, 0, 0, now.Location())
+
+	if now.After(sixAM) {
+		return true, 0
+	}
+
+	// 计算距离06:00还剩多少时间
+	remaining := sixAM.Sub(now)
+	return false, remaining
+}
+
 // CanPublish 检查是否可以发布，不阻塞，返回状态, 和等待时间
 func (pc *publisherController) CanPublish(ctx context.Context) (bool, time.Duration) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
+
+	// 如果是每天的早上六点之前, 不允许发布, 返回到6点还需多少时间
+	timeOk, waitTime := CheckAfterSixAM()
+	if !timeOk {
+		log.Default().Printf("不在发布时间范围内，等待 %v 后再重试", waitTime)
+		return false, waitTime
+	}
 
 	// 清理超过1小时的发布记录
 	now := pc.timeProvider.Now()
@@ -84,6 +106,8 @@ func (pc *publisherController) CanPublish(ctx context.Context) (bool, time.Durat
 	}
 
 	// 随机化发布间隔
+	randomInterval := pc.minInterval + time.Duration(float64(pc.maxInterval-pc.minInterval)*pc.randProvider.Float64())
+	pc.logger.Printf("随机化发布间隔，等待 %v\n", randomInterval)
 	if pc.maxInterval > pc.minInterval {
 		randomInterval := pc.minInterval + time.Duration(float64(pc.maxInterval-pc.minInterval)*pc.randProvider.Float64())
 		pc.logger.Printf("随机化发布间隔，等待 %v\n", randomInterval)
@@ -91,8 +115,14 @@ func (pc *publisherController) CanPublish(ctx context.Context) (bool, time.Durat
 	}
 
 	// 记录本次发布时间
-	pc.publishTimes = append(pc.publishTimes, pc.timeProvider.Now())
-	return true, 0
+	base := pc.timeProvider.Now()
+	if len(pc.publishTimes) > 0 {
+		base = pc.publishTimes[len(pc.publishTimes)-1]
+	}
+	nextPubTime := base.Add(randomInterval)
+	pc.publishTimes = append(pc.publishTimes, nextPubTime)
+
+	return true, max(0, nextPubTime.Sub(now))
 }
 
 // 默认的时间提供者实现
